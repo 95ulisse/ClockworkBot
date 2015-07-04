@@ -1,8 +1,12 @@
 express = require 'express'
 app = express()
 bodyParser = require 'body-parser'
+mongoose = require 'mongoose'
 config = require './lib/config'
 log = require './lib/log'
+messageParser = require './lib/messageParser'
+
+telegram = require './lib/telegramApi'
 
 # Common middlewares
 app.use bodyParser.json()
@@ -13,12 +17,6 @@ app.use bodyParser.json()
 updateQueue = do () ->
     lastId = -1
     queue = {}
-
-    # Actual function used to process the updates
-    processUpdate = (u) ->
-        log.info "Processed ##{u.update_id}: #{u.message.text}"
-
-    # Exports the function to push in the queue
     return (u) ->
         lastId = u.update_id - 1 if lastId == -1
         throw new Error('Duplicate update ID #' + u.update_id) if queue[u.update_id] or u.update_id <= lastId
@@ -27,7 +25,7 @@ updateQueue = do () ->
 
         u = queue[lastId + 1]
         while u
-            processUpdate u
+            messageParser u.message
             lastId++
             u = queue[lastId + 1]
 
@@ -45,5 +43,17 @@ app.use (err, req, res, next) ->
     log.error err.stack
     res.sendStatus 500
 
-app.listen config.port, () ->
-    log.debug 'Server listening on port ' + config.port
+# Connects to the database
+mongoose.connect config.mongoConnectionString
+connection = mongoose.connection
+
+# Adds some event handlers for logging
+connection.on 'open', log.debug.bind(log, 'Connection to MongoDB open')
+connection.on 'close', log.debug.bind(log, 'Connection to MongoDB closed')
+connection.on 'reconnected', log.debug.bind(log, 'Reconnected to MongoDB')
+connection.on 'error', (e) -> log.error 'MongoDB connection error: ' + e.stack
+
+# Starts the server once that the connection with MongoDB is opened
+connection.once 'open', () ->
+    app.listen config.port, () ->
+        log.debug 'Server listening on port ' + config.port
