@@ -1,8 +1,11 @@
 request = require 'request'
 config = require './config'
 
+if not config.botKey
+    throw new Error 'Please, provide the bot key.'
+
 # Base URL for API calls
-baseUrl = "https://api.telegram.org/bot#{config.apiKey}/"
+baseUrl = "https://api.telegram.org/bot#{config.botKey}/"
 
 module.exports = (methodName, params) ->
     return new Promise (resolve, reject) ->

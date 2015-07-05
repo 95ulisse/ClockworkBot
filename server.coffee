@@ -1,3 +1,4 @@
+fs = require 'fs'
 express = require 'express'
 app = express()
 bodyParser = require 'body-parser'
@@ -55,5 +56,22 @@ connection.on 'error', (e) -> log.error 'MongoDB connection error: ' + e.stack
 
 # Starts the server once that the connection with MongoDB is opened
 connection.once 'open', () ->
-    app.listen config.port, () ->
-        log.debug 'Server listening on port ' + config.port
+    if config.method == 'tcp'
+        if not config.port
+            throw new Error 'Please, provide the port setting.'
+        if not config.bindIp
+            throw new Error 'Please, provide the bindIp setting.'
+        app.listen config.port, config.bindIp, () ->
+            log.debug 'Listening on ' + config.bindIp + ':' + config.port
+    else if config.method == 'unix'
+        if not config.bindSocket
+            throw new Error 'Please, provide the bindSocket setting.'
+        if not config.socketPermissions
+            throw new Error 'Please, provide the socketPermissions setting.'
+        fs.stat config.bindSocket, (err) ->
+            fs.unlinkSync config.bindSocket if not err
+            app.listen config.bindSocket, () ->
+                fs.chmodSync config.bindSocket, config.socketPermissions
+                log.debug 'Listening on socket ' + config.bindSocket
+    else
+        throw new Error 'Invalid configuration value for method setting: ' + config.method
